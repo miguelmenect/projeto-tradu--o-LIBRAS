@@ -27,16 +27,21 @@ def punho_fechado(landmarks): #função recebendo de parametro lista com os pont
     #16- dedo anelr
     #20-mindinho
 
-    dedos = [4, 8, 12, 16, 20]  # pontas dos dedos
-    base = 0  # punho
+    dedos = [(8, 6), (12, 10), (16, 14), (20, 18)]  # pontas dos dedos
+    base = landmarks[0]  # punho
 
     fechado = True
-    for dedo in dedos:
-        #se o dedo encontrado no array for menor que punho então "mão fechada" é false
-        if landmarks[dedo].y < landmarks[base].y:
-            fechado = False #mão fechada é false
+    for ponta, pip in dedos:
+            dist_ponta = distancia(landmarks[ponta], base)
+            dist_pip = distancia(landmarks[pip], base)
+    
+            if dist_ponta > dist_pip: #se o dedo encontrado no array for menor que punho então "mão fechada" é false
+                fechado = False #mão fechada é false
 
     return fechado
+
+def distancia(p1, p2):
+    return ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2) ** 0.5
 
 with HandLandmarker.create_from_options(options) as detector:
     while True:
@@ -73,9 +78,9 @@ with HandLandmarker.create_from_options(options) as detector:
                             2
                         )
 
-        cv2.imshow("Projeto LIBRAS", frame)#frame é imagem do gesto detectado e texto
+        cv2.imshow("Projeto LIBRAS", frame)
 
-        if cv2.waitKey(1) & 0xFF == 27: #uebra ao pressinar a tecla "esc"
+        if cv2.waitKey(1) & 0xFF == 27: #sai do loop quando clica no esc
             break
 
 cap.release()
