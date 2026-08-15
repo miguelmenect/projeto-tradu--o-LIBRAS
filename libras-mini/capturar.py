@@ -1,3 +1,11 @@
+"""
+Olá professores ou quem quer que esteja lendo eu tive que publicar todo o dataset
+no google drive por conta do tamanho da imagem eu vou colocar o link abaixo para que
+você possa acessar vou deixar disponivel até a correção do tcc desde já agradeço a 
+compreensão e me desculpe por ter que colocar as imagens em outro lugar.
+
+link: https://drive.google.com/drive/folders/10j2qGn-FrpO0KwCTCxIu4izh7af92qRP?usp=sharing
+"""
 import argparse
 import time
 from pathlib import Path
