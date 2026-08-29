@@ -110,29 +110,6 @@ def criar_modelo(X_normalizacao: np.ndarray, numero_classes: int) -> keras.Model
     )
     return modelo
 
-def treinar_modelo(
-    modelo: keras.Model,
-    X_treino: np.ndarray,
-    y_treino: np.ndarray,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-) -> keras.callbacks.History:
-    parada_antecipada = keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        patience=15,
-        restore_best_weights=True,
-    )
-    return modelo.fit(
-        X_treino,
-        y_treino,
-        validation_data=(X_val, y_val),
-        epochs=300,
-        batch_size=32,
-        callbacks=[parada_antecipada],
-        shuffle=True,
-        verbose=2,
-    )
-
 def separar_validacao(dados: dict[str, np.ndarray]):
     X_treino, y_treino, X_validacao, y_validacao = [], [], [], []
     for classe, vetores in dados.items():
@@ -147,23 +124,6 @@ def separar_validacao(dados: dict[str, np.ndarray]):
         np.asarray(X_validacao, dtype=np.float32),
         np.asarray(y_validacao),
     )
-
-def salvar_modelo(
-    modelo: keras.Model,
-    caminho: str | Path,
-    classes: list[str],
-    melhor_epoca: int,
-) -> None:
-    caminho = Path(caminho)
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    temporario = caminho.with_name(caminho.stem + ".tmp" + caminho.suffix)
-    modelo.save(temporario)
-    with h5py.File(temporario, "a") as arquivo_h5:
-        arquivo_h5.attrs["versao"] = VERSAO_ARTEFATO
-        arquivo_h5.attrs["numero_features"] = NUMERO_FEATURES
-        arquivo_h5.attrs["classes"] = json.dumps(classes)
-        arquivo_h5.attrs["melhor_epoca"] = melhor_epoca
-    os.replace(temporario, caminho)
 
 def salvar_relatorio_visual(
     historico: keras.callbacks.History,
@@ -208,7 +168,7 @@ def salvar_relatorio_visual(
     eixo_matriz.set_title("Matriz de confusão normalizada por letra")
     eixo_matriz.tick_params(axis="x", labelrotation=45)
     figura.suptitle(
-        f"Validação do classificador de Libras — acurácia: {acuracia * 100:.2f}%",
+        f"Validação acurácia: {acuracia * 100:.2f}%",
         fontsize=16,
     )
     figura.tight_layout(rect=(0, 0, 1, 0.96))
@@ -234,7 +194,17 @@ def treinar(args: argparse.Namespace) -> None:
     y_treino_idx = np.asarray([mapa_classe_indice[c] for c in y_treino])
     y_val_idx = np.asarray([mapa_classe_indice[c] for c in y_val])
     modelo = criar_modelo(X_treino, numero_classes)
-    historico = treinar_modelo(modelo, X_treino, y_treino_idx, X_val, y_val_idx)
+    parada_antecipada = keras.callbacks.EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True)
+    historico = modelo.fit(
+        X_treino,
+        y_treino_idx,
+        validation_data=(X_val, y_val_idx),
+        epochs=300,
+        batch_size=32,
+        callbacks=[parada_antecipada],
+        shuffle=True,
+        verbose=2,
+    )
     previsoes_idx = np.argmax(modelo.predict(X_val, verbose=0), axis=1)
     previsoes = np.asarray([classes_ordenadas[i] for i in previsoes_idx])
     acuracia = accuracy_score(y_val, previsoes)
@@ -248,12 +218,16 @@ def treinar(args: argparse.Namespace) -> None:
         args.relatorio,
     )
     melhor_epoca = int(np.argmin(historico.history["val_loss"]) + 1)
-    salvar_modelo(
-        modelo,
-        args.modelo,
-        classes_ordenadas,
-        melhor_epoca,
-    )
+    caminho = Path(args.modelo)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    temporario = caminho.with_name(caminho.stem + ".tmp" + caminho.suffix)
+    modelo.save(temporario)
+    with h5py.File(temporario, "a") as arquivo_h5:
+        arquivo_h5.attrs["versao"] = VERSAO_ARTEFATO
+        arquivo_h5.attrs["numero_features"] = NUMERO_FEATURES
+        arquivo_h5.attrs["classes"] = json.dumps(classes)
+        arquivo_h5.attrs["melhor_epoca"] = melhor_epoca
+    os.replace(temporario, caminho)
 
 def inteiro_nao_negativo(valor: str) -> int:
     numero = int(valor)

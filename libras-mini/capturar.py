@@ -11,35 +11,22 @@ import time
 from pathlib import Path
 import cv2
 
-def validar_classe(valor: str) -> str:
-    classe = valor.strip().upper()
-    return classe
+def capturar(args: argparse.Namespace) -> None:
+    classe = args.classe
+    if classe is None:
+        rec_classe = input("Qual letra ou sinal deseja capturar? ")
+        classe = rec_classe.strip().upper()
 
-def inteiro_positivo(valor: str) -> int:    
-    return int(valor)
-
-def numero_nao_negativo(valor: str) -> float:
-    return float(valor)
-
-def proximo_indice(pasta: Path) -> int:
+    pasta_saida = Path(args.dataset) / classe
+    pasta_saida.mkdir(parents=True, exist_ok=True)
     maior_indice = 0
-    for arquivo in pasta.glob("*.jpg"):
+    for arquivo in pasta_saida.glob("*.jpg"):
         nome = arquivo.stem
         if nome.isdigit():
             numero = int(nome)
             if numero > maior_indice:
                 maior_indice = numero
-
-    return maior_indice + 1
-
-def capturar(args: argparse.Namespace) -> None:
-    classe = args.classe
-    if classe is None:
-        classe = validar_classe(input("Qual letra ou sinal deseja capturar? "))
-
-    pasta_saida = Path(args.dataset) / classe
-    pasta_saida.mkdir(parents=True, exist_ok=True)
-    indice = proximo_indice(pasta_saida)
+    indice = maior_indice + 1
     camera = cv2.VideoCapture(args.camera)
     inicio_contagem = None
     proxima_foto = None
@@ -129,23 +116,22 @@ def criar_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "classe",
         nargs="?",
-        type=validar_classe,
     )
     parser.add_argument("--dataset", default="dataset")
-    parser.add_argument("--quantidade", type=inteiro_positivo, default=400)
+    parser.add_argument("--quantidade", type=int, default=400)
     parser.add_argument(
         "--intervalo",
-        type=numero_nao_negativo,
+        type=float,
         default=0.10,
     )
     parser.add_argument(
         "--espera",
-        type=numero_nao_negativo,
+        type=float,
         default=2.0,
     )
     parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument("--largura", type=inteiro_positivo, default=1280)
-    parser.add_argument("--altura", type=inteiro_positivo, default=720)
+    parser.add_argument("--largura", type=int, default=1280)
+    parser.add_argument("--altura", type=int, default=720)
     return parser
 
 capturar(criar_parser().parse_args())
