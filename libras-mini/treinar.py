@@ -1,15 +1,10 @@
-
 import argparse
 import json
 import os
-import time
 import urllib.request
 from pathlib import Path
-
 import h5py
 import matplotlib
-matplotlib.use("Agg")
-
 import mediapipe as mp
 import numpy as np
 from matplotlib import pyplot as plt
@@ -24,7 +19,7 @@ from sklearn.metrics import (
 from tensorflow import keras
 from tensorflow.keras import layers
 
-
+matplotlib.use("Agg")
 CAMINHO_DETECTOR_PADRAO = "hand_landmarker.task"
 URL_DETECTOR = (
     "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
@@ -34,20 +29,11 @@ CAMINHO_MODELO_PADRAO = "modelo_libras_mlp.h5"
 CAMINHO_RELATORIO_PADRAO = "relatorio_treinamento.png"
 EXTENSOES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VERSAO_ARTEFATO = 2
-
 PULSO = 0
 BASE_DEDO_MEDIO = 9
 PONTAS_DEDOS = [4, 8, 12, 16, 20]
 BASE_INDICADOR = 5
 NUMERO_FEATURES = 72
-
-
-def garantir_detector(caminho: str | Path) -> None:
-    caminho = Path(caminho)
-    if caminho.is_file():
-        return
-    urllib.request.urlretrieve(URL_DETECTOR, caminho)
-
 
 def normalizar_landmarks(landmarks) -> np.ndarray:
     pontos = np.asarray([[p.x, p.y, p.z] for p in landmarks], dtype=np.float32)
@@ -57,7 +43,6 @@ def normalizar_landmarks(landmarks) -> np.ndarray:
     pontos = pontos - pontos[PULSO]
     escala = max(float(np.linalg.norm(pontos[BASE_DEDO_MEDIO])), 1e-6)
     pontos = pontos / escala
-
     fechamento_dedos = [float(np.linalg.norm(pontos[p])) for p in PONTAS_DEDOS]
     polegar_indicador = float(
         np.linalg.norm(pontos[PONTAS_DEDOS[0]] - pontos[BASE_INDICADOR])
@@ -79,7 +64,6 @@ def normalizar_landmarks(landmarks) -> np.ndarray:
 
 def listar_classes(pasta_dataset: str | Path) -> list[tuple[str, list[Path]]]:
     raiz = Path(pasta_dataset)
-
     classes = []
     nomes_encontrados = set()
     for pasta in sorted(
@@ -108,7 +92,6 @@ def listar_classes(pasta_dataset: str | Path) -> list[tuple[str, list[Path]]]:
         )
     return classes
 
-
 def extrair_dataset(
     detector, classes: list[tuple[str, list[Path]]], minimo_por_classe: int
 ) -> dict[str, np.ndarray]:
@@ -116,7 +99,6 @@ def extrair_dataset(
     for classe, imagens in classes:
         vetores = []
         sem_mao = 0
-        print(f"\nClasse '{classe}': processando {len(imagens)} foto(s)...")
         for indice, caminho in enumerate(imagens, start=1):
             try:
                 imagem = mp.Image.create_from_file(str(caminho))
@@ -133,18 +115,12 @@ def extrair_dataset(
             if indice % 50 == 0 or indice == len(imagens):
                 print(f"  {indice}/{len(imagens)}", end="\r", flush=True)
 
-        print(
-            f"  {len(vetores)} amostra(s) válida(s); "
-            f"{sem_mao} foto(s) sem mão detectada."
-        )
         if len(vetores) < minimo_por_classe:
             raise ValueError(
-                f"A classe '{classe}' tem apenas {len(vetores)} amostras válidas. "
-                f"Capture pelo menos {minimo_por_classe} fotos válidas."
+                f"Precisa ter pelo menos {minimo_por_classe} fotos válidas."
             )
         dados[classe] = np.asarray(vetores, dtype=np.float32)
     return dados
-
 
 def criar_modelo(X_normalizacao: np.ndarray, numero_classes: int) -> keras.Model:
     normalizador = layers.Normalization(axis=-1)
@@ -191,14 +167,12 @@ def salvar_relatorio_visual(
 ) -> None:
     caminho = Path(caminho)
     caminho.parent.mkdir(parents=True, exist_ok=True)
-
     epocas = np.arange(1, len(historico.history["loss"]) + 1)
     figura = plt.figure(figsize=(17, 14))
     grade = figura.add_gridspec(2, 2, height_ratios=(1, 1.35))
     eixo_acuracia = figura.add_subplot(grade[0, 0])
     eixo_perda = figura.add_subplot(grade[0, 1])
     eixo_matriz = figura.add_subplot(grade[1, :])
-
     eixo_acuracia.plot(epocas, historico.history["accuracy"], label="Treino")
     eixo_acuracia.plot(
         epocas, historico.history["val_accuracy"], label="Validação"
@@ -216,7 +190,6 @@ def salvar_relatorio_visual(
     eixo_perda.set_ylabel("Perda")
     eixo_perda.grid(alpha=0.3)
     eixo_perda.legend()
-
     matriz = confusion_matrix(y_val, previsoes, labels=classes, normalize="true")
     exibicao = ConfusionMatrixDisplay(confusion_matrix=matriz, display_labels=classes)
     exibicao.plot(
@@ -234,7 +207,6 @@ def salvar_relatorio_visual(
     figura.tight_layout(rect=(0, 0, 1, 0.96))
     figura.savefig(caminho, dpi=160, bbox_inches="tight")
     plt.close(figura)
-
 
 def verificar_qualidade(
     acuracia: float,
@@ -269,7 +241,6 @@ def verificar_qualidade(
         "Confira o relatório em PNG e capture mais exemplos das letras indicadas."
     )
 
-
 def treinar(args: argparse.Namespace) -> None:
     if args.sem_validacao:
         raise ValueError(
@@ -279,7 +250,9 @@ def treinar(args: argparse.Namespace) -> None:
 
     keras.utils.set_random_seed(args.semente)
     classes = listar_classes(args.dataset)
-    garantir_detector(args.detector)
+    caminho = Path(args.detector)
+    if not caminho.is_file():
+        urllib.request.urlretrieve(URL_DETECTOR, caminho)
 
     opcoes = vision.HandLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=args.detector),
@@ -293,7 +266,6 @@ def treinar(args: argparse.Namespace) -> None:
     classes_ordenadas = sorted(dados.keys())
     mapa_classe_indice = {classe: indice for indice, classe in enumerate(classes_ordenadas)}
     numero_classes = len(classes_ordenadas)
-
     X_treino, y_treino, X_val, y_val = separar_validacao(dados)
     y_treino_idx = np.asarray([mapa_classe_indice[c] for c in y_treino])
     y_val_idx = np.asarray([mapa_classe_indice[c] for c in y_val])
@@ -341,7 +313,6 @@ def treinar(args: argparse.Namespace) -> None:
         acuracia,
         args.relatorio,
     )
-    print(f"Relatório visual salvo em '{args.relatorio}'.")
     verificar_qualidade(
         acuracia,
         metricas,
@@ -368,13 +339,17 @@ def inteiro_nao_negativo(valor: str) -> int:
         raise argparse.ArgumentTypeError("o valor não pode ser negativo")
     return numero
 
-
 def probabilidade(valor: str) -> float:
     numero = float(valor)
     if not 0 <= numero <= 1:
         raise argparse.ArgumentTypeError("o valor deve ficar entre 0 e 1")
     return numero
 
+def inteiro_positivo(valor: str) -> int:
+    numero = int(valor)
+    if numero < 0:
+        raise argparse.ArgumentTypeError("O valor tem que ser inteiro positivo")
+    return numero
 
 def criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -386,7 +361,6 @@ def criar_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--relatorio",
         default=CAMINHO_RELATORIO_PADRAO,
-        help="Imagem PNG com curvas e matriz de confusão (padrão: %(default)s).",
     )
     parser.add_argument("--minimo-por-classe", type=inteiro_positivo, default=20)
     parser.add_argument("--confianca-deteccao", type=probabilidade, default=0.5)
@@ -394,31 +368,26 @@ def criar_parser() -> argparse.ArgumentParser:
         "--acuracia-minima",
         type=probabilidade,
         default=0.90,
-        help="Mínimo na validação para substituir o modelo salvo (padrão: 0.90).",
     )
     parser.add_argument(
         "--recall-minimo",
         type=probabilidade,
         default=0.70,
-        help="Recall mínimo de cada letra para substituir o modelo (padrão: 0.70).",
     )
     parser.add_argument(
         "--semente",
         type=inteiro_nao_negativo,
         default=42,
-        help="Semente para reproduzir o treinamento (padrão: 42).",
     )
     parser.add_argument(
         "--sem-validacao",
         action="store_true",
-        help="Obsoleto: o treino seguro sempre exige validação.",
     )
     return parser
 
 
-def main() -> None:
-    treinar(criar_parser().parse_args())
+
+treinar(criar_parser().parse_args())
 
 
-if __name__ == "__main__":
-    main()
+
