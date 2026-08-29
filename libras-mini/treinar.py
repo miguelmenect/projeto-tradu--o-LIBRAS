@@ -166,32 +166,6 @@ def criar_modelo(X_normalizacao: np.ndarray, numero_classes: int) -> keras.Model
     )
     return modelo
 
-
-def treinar_modelo(
-    modelo: keras.Model,
-    X_treino: np.ndarray,
-    y_treino: np.ndarray,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
-) -> keras.callbacks.History:
-    parada_antecipada = keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        patience=15,
-        restore_best_weights=True,
-    )
-    return modelo.fit(
-        X_treino,
-        y_treino,
-        validation_data=(X_val, y_val),
-        validation_split=0.0,
-        epochs=300,
-        batch_size=32,
-        callbacks=[parada_antecipada],
-        shuffle=True,
-        verbose=2,
-    )
-
-
 def separar_validacao(dados: dict[str, np.ndarray]):
     X_treino, y_treino, X_validacao, y_validacao = [], [], [], []
     for classe, vetores in dados.items():
@@ -206,37 +180,6 @@ def separar_validacao(dados: dict[str, np.ndarray]):
         np.asarray(X_validacao, dtype=np.float32),
         np.asarray(y_validacao),
     )
-
-
-def salvar_modelo(
-    modelo: keras.Model,
-    caminho: str | Path,
-    classes: list[str],
-    total_dataset: int,
-    total_treino: int,
-    total_validacao: int,
-    acuracia_validacao: float,
-    melhor_epoca: int,
-) -> None:
-    caminho = Path(caminho)
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    temporario = caminho.with_name(caminho.stem + ".tmp" + caminho.suffix)
-
-    modelo.save(temporario)
-    with h5py.File(temporario, "a") as arquivo_h5:
-        arquivo_h5.attrs["versao"] = VERSAO_ARTEFATO
-        arquivo_h5.attrs["tipo"] = "landmarks-mediapipe-keras-mlp"
-        arquivo_h5.attrs["numero_features"] = NUMERO_FEATURES
-        arquivo_h5.attrs["classes"] = json.dumps(classes)
-        arquivo_h5.attrs["total_amostras"] = total_dataset
-        arquivo_h5.attrs["total_amostras_treino"] = total_treino
-        arquivo_h5.attrs["total_amostras_validacao"] = total_validacao
-        arquivo_h5.attrs["acuracia_validacao"] = acuracia_validacao
-        arquivo_h5.attrs["melhor_epoca"] = melhor_epoca
-        arquivo_h5.attrs["modo_treino"] = "validacao-explicita-por-classe"
-        arquivo_h5.attrs["criado_em"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    os.replace(temporario, caminho)
-
 
 def salvar_relatorio_visual(
     historico: keras.callbacks.History,
@@ -285,7 +228,7 @@ def salvar_relatorio_visual(
     eixo_matriz.set_title("Matriz de confusão normalizada por letra")
     eixo_matriz.tick_params(axis="x", labelrotation=45)
     figura.suptitle(
-        f"Validação do classificador de Libras — acurácia: {acuracia * 100:.2f}%",
+        f"Validação acurácia: {acuracia * 100:.2f}%",
         fontsize=16,
     )
     figura.tight_layout(rect=(0, 0, 1, 0.96))
@@ -359,7 +302,17 @@ def treinar(args: argparse.Namespace) -> None:
         f"{len(X_val)} amostras separadas..."
     )
     modelo = criar_modelo(X_treino, numero_classes)
-    historico = treinar_modelo(modelo, X_treino, y_treino_idx, X_val, y_val_idx)
+    parada_antecipada = keras.callbacks.EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True)
+    historico = modelo.fit(
+        X_treino,
+        y_treino_idx,
+        validation_data=(X_val, y_val_idx),
+        epochs=300,
+        batch_size=32,
+        callbacks=[parada_antecipada],
+        shuffle=True,
+        verbose=2,
+    )
     previsoes_idx = np.argmax(modelo.predict(X_val, verbose=0), axis=1)
     previsoes = np.asarray([classes_ordenadas[i] for i in previsoes_idx])
     acuracia = accuracy_score(y_val, previsoes)
@@ -398,34 +351,16 @@ def treinar(args: argparse.Namespace) -> None:
     )
 
     melhor_epoca = int(np.argmin(historico.history["val_loss"]) + 1)
-    total_dataset = sum(len(vetores) for vetores in dados.values())
-    salvar_modelo(
-        modelo,
-        args.modelo,
-        classes_ordenadas,
-        total_dataset,
-        len(X_treino),
-        len(X_val),
-        acuracia,
-        melhor_epoca,
-    )
-    print(
-        f"Modelo validado salvo em '{args.modelo}' com as classes: "
-        f"{', '.join(classes_ordenadas)}"
-    )
-    print(
-        f"Foram usadas {len(X_treino)} amostras para treino e {len(X_val)} "
-        "para validação; toda classe participou dos dois conjuntos."
-    )
-    print("Agora execute: python classificar_libras_csv.py")
-
-
-def inteiro_positivo(valor: str) -> int:
-    numero = int(valor)
-    if numero < 1:
-        raise argparse.ArgumentTypeError("o valor deve ser maior que zero")
-    return numero
-
+    caminho = Path(args.modelo)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    temporario = caminho.with_name(caminho.stem + ".tmp" + caminho.suffix)
+    modelo.save(temporario)
+    with h5py.File(temporario, "a") as arquivo_h5:
+        arquivo_h5.attrs["versao"] = VERSAO_ARTEFATO
+        arquivo_h5.attrs["numero_features"] = NUMERO_FEATURES
+        arquivo_h5.attrs["classes"] = json.dumps(classes)
+        arquivo_h5.attrs["melhor_epoca"] = melhor_epoca
+    os.replace(temporario, caminho)
 
 def inteiro_nao_negativo(valor: str) -> int:
     numero = int(valor)
