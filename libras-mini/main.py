@@ -5,6 +5,7 @@ import mediapipe as mp
 import numpy as np
 from tensorflow import keras
 from txt_area import AreaDeTexto
+from detctor_letra_movimento import DetectorLetraH
 
 # Constantes — precisam ser asmeesmas usadas no script de treino,
 # senão o vetor de features fica diferente do que o modelo aprendeu
@@ -13,7 +14,7 @@ CAMINHO_MODELO = "modelo_libras_mlp.h5"
 CAMINHO_DETECTOR = "hand_landmarker.task"
 CONFIANCA_MINIMA = 0.70  # abaixo disso, ignora a previsao
 
-LETRAS_PERMITIDAS = {"A", "B"}  # letras de teste a serem exibidas
+#LETRAS_PERMITIDAS = {"H", "j"}  # letras de teste a serem exibidas
 ALTURA_BARRA_TEXTO = 60 
 
 PULSO = 0
@@ -108,9 +109,11 @@ def desenhar_barra_de_texto(frame, texto: str):
 
 def main() -> None:
     modelo, classes = carregar_modelo(CAMINHO_MODELO)
-    print(f"Modelo carregado. Filtrando apenas: {sorted(LETRAS_PERMITIDAS)}")
+    #print(f"Modelo carregado. Filtrando apenas: {sorted(LETRAS_PERMITIDAS)}")
 
     area_de_texto = AreaDeTexto(frames_para_confirmar=15)
+
+    detector_h = DetectorLetraH()
 
     BaseOptions = mp.tasks.BaseOptions
     HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -143,14 +146,34 @@ def main() -> None:
 
             if result.hand_landmarks:
                 for hand_landmarks in result.hand_landmarks:
-                    try:
-                        letra, confianca = prever_letra(modelo, classes, hand_landmarks)
-                    except ValueError:
-                        continue
+
+                    h_detectado, info_h = detector_h.processar_frame(hand_landmarks)
+
+                    if h_detectado:
+                        area_de_texto.confirmar_letra_direta("H")
+                        cv2.putText(
+                            frame,
+                            "H (movimento)",
+                            (50, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1.2,
+                            (0, 255, 0),
+                            2,
+                        )
+
+                    elif info_h.get("formato_ok"):                    
+                        area_de_texto.atualizar(None)
+ 
+                    else:                   
+                        letra_valida_no_frame = None
+                        try:
+                            letra, confianca = prever_letra(modelo, classes, hand_landmarks)
+                        except ValueError:
+                            letra, confianca = None, 0.0
 
                     # só reage se a letra prevista estiver na lista permitida
                     # e a acuracy for alta o suficiente
-                    if letra in LETRAS_PERMITIDAS and confianca >= CONFIANCA_MINIMA:
+                    """ if letra in LETRAS_PERMITIDAS and confianca >= CONFIANCA_MINIMA:
                         texto = f"{letra} ({confianca * 100:.0f}%)"
                         cv2.putText(
                             frame,
@@ -162,7 +185,20 @@ def main() -> None:
                             2,
                         )
                         letra_valida_no_frame = letra
-                    break
+                    break """
+
+                    if letra is not None and confianca >= CONFIANCA_MINIMA:
+                        texto = f"{letra} ({confianca * 100:.0f}%)"
+                        cv2.putText(
+                            frame,
+                            texto,
+                            (50, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1.2,
+                            (0, 255, 0),
+                            2,
+                        )
+                        letra_valida_no_frame = letra                
 
             area_de_texto.atualizar(letra_valida_no_frame)
  
