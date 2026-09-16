@@ -5,11 +5,14 @@ import mediapipe as mp
 import numpy as np
 from tensorflow import keras
 from txt_area import AreaDeTexto
-from detctor_letra_movimento import DetectorLetraH
+import math
+import time 
 
 # Constantes — precisam ser asmeesmas usadas no script de treino,
 # senão o vetor de features fica diferente do que o modelo aprendeu
 
+COOLDOWN_APAGAR = 0.9  # segundos entre apagões
+ultimo_apagar = 0.0
 CAMINHO_MODELO = "modelo_libras_mlp.h5"
 CAMINHO_DETECTOR = "hand_landmarker.task"
 CONFIANCA_MINIMA = 0.70  # abaixo disso, ignora a previsao
@@ -22,6 +25,72 @@ BASE_DEDO_MEDIO = 9
 PONTAS_DEDOS = [4, 8, 12, 16, 20]
 BASE_INDICADOR = 5
 
+def vetor(p1, p2):
+    #saber para que lado o pnto está apontando, no caso o polegar
+    # se está apontando para fora da mão ou não
+    return (p2.x - p1.x, p2.y - p1.y)
+
+def normalizar(v):
+    #deixa as setas/direcoes sempre do mesmo tamanho
+    # antes de comparar, sem isso uma mão mais perto da camera teria setas
+    # maiores que uma mão mais longes
+    norma = math.hypot(v[0], v[1])
+    if norma < 1e-6:
+        return (0.0, 0.0)
+    return (v[0] / norma, v[1] / norma)
+
+def produto_escalar(v1, v2):
+    return v1[0] * v2[0] + v1[1] * v2[1]
+
+def distancia(p1, p2):
+    #para sabr se o dedo esta dobrado ou esticado, comparando
+    # a ponta do dedo com o punho
+    return math.hypot(p1.x - p2.x, p1.y - p2.y)
+
+def gesto_apagar(landmarks):
+    #usa posição do punho e distante do dedo polegar para determinar o apagar
+    punho = landmarks[0]
+    base_medio = landmarks[9]
+    pontas = [8, 12, 16, 20]
+    bases = [5, 9, 13, 17]
+
+    eixo_mao = normalizar(vetor(punho, base_medio))
+    tamanho_mao = distancia(punho, base_medio)   
+
+    #checa se todos os dedos estão fechados
+    for ponta, base in zip(pontas, bases):
+
+        #checagem feita pela distancia entre punho e ponta dos dedos, quanto
+        #mais longe, mais a probabilidade dos dedos nao estarem dobrados
+        d_ponta = distancia(landmarks[ponta], punho)
+        d_base = distancia(landmarks[base], punho)
+        if d_ponta > d_base * 1.1:
+            return False
+
+   #checa se polega est esticado
+    ponta_polegar = landmarks[4]
+    base_polegar = landmarks[2]
+
+    #polegar pego por distancia entre ponta e base
+    comprimento_polegar = distancia(ponta_polegar, base_polegar)
+
+    # se polegar esticado a 80% ou mais entende que ele está suficientemente
+    #esticado, simbolizando o gestor de apagar/dislike
+    if comprimento_polegar < tamanho_mao * 0.80:
+        return False
+
+    #eixo que o polegar se encontra,se estiver apotando fora/oposto da mão
+    #entende que provavelmente é gesto apagar
+    direcao_polegar = normalizar(vetor(base_polegar, ponta_polegar))
+    alinhamento = produto_escalar(direcao_polegar, eixo_mao)
+    if alinhamento <= 0.5:
+        return False
+    
+    dist_polegar_indicador = distancia(landmarks[4], landmarks[6]) / tamanho_mao
+
+    inclinacao_mao = abs(eixo_mao[0])  # componente x do eixo da mão, normalizado    
+
+    return True  # true para gesto apagar, caso todas as condições forem satisfeitas
 
 def normalizar_landmarks(landmarks) -> np.ndarray:
     """mesma funçao usada no treino — gera o vetor de 72 features."""
@@ -111,9 +180,9 @@ def main() -> None:
     modelo, classes = carregar_modelo(CAMINHO_MODELO)
     #print(f"Modelo carregado. Filtrando apenas: {sorted(LETRAS_PERMITIDAS)}")
 
-    area_de_texto = AreaDeTexto(frames_para_confirmar=15)
+    ultimo_apagar = 0.0
 
-    detector_h = DetectorLetraH()
+    area_de_texto = AreaDeTexto(frames_para_confirmar=15)
 
     BaseOptions = mp.tasks.BaseOptions
     HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -146,47 +215,23 @@ def main() -> None:
 
             if result.hand_landmarks:
                 for hand_landmarks in result.hand_landmarks:
+                    letra = None
+                    confianca = 0.0
 
-                    h_detectado, info_h = detector_h.processar_frame(hand_landmarks)
-
-                    if h_detectado:
-                        area_de_texto.confirmar_letra_direta("H")
-                        cv2.putText(
-                            frame,
-                            "H (movimento)",
-                            (50, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1.2,
-                            (0, 255, 0),
-                            2,
-                        )
-
-                    elif info_h.get("formato_ok"):                    
-                        area_de_texto.atualizar(None)
- 
+                    if gesto_apagar(hand_landmarks):
+                        agora = time.time()
+                        if agora - ultimo_apagar > COOLDOWN_APAGAR:
+                            area_de_texto.apagar_ultimo()  # método que você precisa ter/criar na classe AreaDeTexto
+                            ultimo_apagar = agora
+                        cv2.putText(frame, "APAGAR", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 2)
+                                        
                     else:                   
                         letra_valida_no_frame = None
                         try:
                             letra, confianca = prever_letra(modelo, classes, hand_landmarks)
                         except ValueError:
                             letra, confianca = None, 0.0
-
-                    # só reage se a letra prevista estiver na lista permitida
-                    # e a acuracy for alta o suficiente
-                    """ if letra in LETRAS_PERMITIDAS and confianca >= CONFIANCA_MINIMA:
-                        texto = f"{letra} ({confianca * 100:.0f}%)"
-                        cv2.putText(
-                            frame,
-                            texto,
-                            (50, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1.2,
-                            (0, 255, 0),
-                            2,
-                        )
-                        letra_valida_no_frame = letra
-                    break """
-
+                    
                     if letra is not None and confianca >= CONFIANCA_MINIMA:
                         texto = f"{letra} ({confianca * 100:.0f}%)"
                         cv2.putText(
