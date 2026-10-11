@@ -137,6 +137,7 @@ def carregar_modelo(caminho: str):
 
 #recebe modelo já carregado, a lista de letras e os ontos da mão(landmarks)
 def prever_letra(modelo, classes, landmarks):
+    modelo_detec_prev = time.perf_counter()
     #Roda modelo em uma mão detectada e retorna (letra, confianca/precisão)
 
     #transforma o landmarks em um array de 72 numeros que é o o que o medolo entende
@@ -148,6 +149,9 @@ def prever_letra(modelo, classes, landmarks):
     #recebe esse array para o modelo e retorna a letra prevista e a confiança dessa previsão
     probabilidades = modelo.predict(features, verbose=0)[0]
     indice = int(np.argmax(probabilidades))
+    fim_modelo_detec = time.perf_counter()
+    result_modelo_previ = (fim_modelo_detec-modelo_detec_prev)*1000
+    print(f"print do tempo de detecção das letras pelo modelo {result_modelo_previ:.2f} ms")
     return classes[indice], float(probabilidades[indice])
 
 
@@ -196,9 +200,9 @@ def main() -> None:
     )
 
     cap = cv2.VideoCapture(0)
-
     with HandLandmarker.create_from_options(options) as detector:
         while True:
+            inicio_cat_landmarks_prev = time.perf_counter()
             success, frame = cap.read()
             if not success:
                 break
@@ -250,7 +254,9 @@ def main() -> None:
             desenhar_barra_de_texto(frame, area_de_texto.obter_texto())
 
             cv2.imshow("Projeto LIBRAS", frame)
-
+            fim_cat_landmarks = time.perf_counter()
+            result_cat_landmarks = (fim_cat_landmarks - inicio_cat_landmarks_prev) * 1000
+            print(f"Resultado de tempo do landmarks {result_cat_landmarks:.2f} ms")
             if cv2.waitKey(1) & 0xFF == 27:  #sai do loop quando clica no esc
                 break
 
