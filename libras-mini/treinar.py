@@ -280,7 +280,7 @@ def treinar(args: argparse.Namespace) -> None:
     with h5py.File(temporario, "a") as arquivo_h5:
         arquivo_h5.attrs["versao"] = VERSAO_ARTEFATO
         arquivo_h5.attrs["numero_features"] = NUMERO_FEATURES
-        arquivo_h5.attrs["classes"] = json.dumps(classes)
+        arquivo_h5.attrs["classes"] = json.dumps(classes_ordenadas)
         arquivo_h5.attrs["melhor_epoca"] = melhor_epoca
     os.replace(temporario, caminho)
 

@@ -13,8 +13,8 @@ import time
 
 COOLDOWN_APAGAR = 0.9  # segundos entre apagões
 ultimo_apagar = 0.0
-CAMINHO_MODELO = "modelo_libras_mlp.h5"
-CAMINHO_DETECTOR = "hand_landmarker.task"
+CAMINHO_MODELO = "libras-mini/modelo_libras_mlp.h5"
+CAMINHO_DETECTOR = "libras-mini/hand_landmarker.task"
 CONFIANCA_MINIMA = 0.70  # abaixo disso, ignora a previsao
 
 #LETRAS_PERMITIDAS = {"H", "j"}  # letras de teste a serem exibidas
@@ -207,7 +207,7 @@ def main() -> None:
             if not success:
                 break
 
-            # flip(frame, 1) espelha horizontalmente (efeito "espelho" da webcam)
+            # flip(frame, 1) espelha horizontalmente (efeito "espelho" da webcam) isso é necessario por conta do efeito da camera
             frame = cv2.flip(frame, 1)
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
