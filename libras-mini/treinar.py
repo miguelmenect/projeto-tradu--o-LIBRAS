@@ -16,10 +16,6 @@ from tensorflow.keras import layers
 
 matplotlib.use("Agg")
 CAMINHO_DETECTOR_PADRAO = "hand_landmarker.task"
-URL_DETECTOR = (
-    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-    "hand_landmarker/float16/latest/hand_landmarker.task"
-)
 CAMINHO_MODELO_PADRAO = "modelo_libras_mlp.h5"
 CAMINHO_RELATORIO_PADRAO = "relatorio_treinamento.png"
 EXTENSOES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -227,9 +223,6 @@ def treinar(args: argparse.Namespace) -> None:
     keras.utils.set_random_seed(args.semente)
     classes = listar_classes(args.dataset)
     caminho = Path(args.detector)
-    if not caminho.is_file():
-        urllib.request.urlretrieve(URL_DETECTOR, caminho)
-
     opcoes = vision.HandLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=args.detector),
         running_mode=vision.RunningMode.IMAGE,
